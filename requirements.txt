@@ -1,8 +1,8 @@
-langgraph>=0.2.0
-langchain>=0.3.0
-langchain-google-genai>=2.0.0
-google-generativeai>=0.8.0
-python-dotenv>=1.0.0
-loguru>=0.7.2
-jupyter>=1.0.0
-ipykernel>=6.29.0
+langgraph
+langchain
+langchain-google-genai
+google-generativeai
+python-dotenv
+loguru
+jupyter
+ipykernel

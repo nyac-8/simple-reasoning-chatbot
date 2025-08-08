@@ -15,7 +15,7 @@ Build a LangGraph-based orchestration layer that emulates the "thinking → answ
 
 #### Graph Structure
 - **Two Main Nodes/Agents**:
-  1. **Reasoner Agent**: Handles thinking/reasoning loops, decides when ready to answer
+  1. **Orchestrator Agent**: Handles thinking/reasoning loops, decides when ready to answer
   2. **Writer Agent**: Formats final response from reasoning context
 
 #### State Design
