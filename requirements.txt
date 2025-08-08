@@ -1,0 +1,5 @@
+jupyterlab
+pydantic
+langchain
+langchain-core
+langgraph
