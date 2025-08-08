@@ -1,5 +1,8 @@
-jupyterlab
-pydantic
-langchain
-langchain-core
 langgraph
+langchain
+langchain-google-genai
+google-generativeai
+python-dotenv
+loguru
+jupyter
+ipykernel

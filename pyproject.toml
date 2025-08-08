@@ -10,4 +10,7 @@ dependencies = [
     "langchain",
     "langchain-core",
     "langgraph",
+    "dotenv>=0.9.9",
+    "langchain-google-genai>=2.1.9",
+    "loguru>=0.7.3",
 ]
