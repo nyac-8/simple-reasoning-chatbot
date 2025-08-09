@@ -61,6 +61,88 @@ Build a LangGraph-based orchestration layer that emulates the "thinking → answ
 
 ## Version 2 Objectives (CURRENT)
 
+### CRITICAL: Functional Programming & LangGraph Best Practices
+
+#### Core Principles
+- **Immutable State**: Never mutate state directly. Nodes return new values, not modified objects
+- **Pure Functions**: Nodes are pure functions: (state, config) → partial_state
+- **Single Responsibility**: Each node returns ONLY the fields it's responsible for
+- **Framework Handles Merging**: LangGraph's reducers handle state merging automatically
+
+#### Node Design Pattern
+```python
+def node(state: State, config: Config) -> PartialState:
+    # 1. Read from state (immutable)
+    current_messages = state["messages"]
+    
+    # 2. Perform computation (pure)
+    new_message = process_logic(current_messages)
+    
+    # 3. Return ONLY changed fields
+    return {"messages": current_messages + [new_message]}
+    # NOT: return full state or mutate state
+```
+
+#### Key Rules
+1. **Once Modified, Don't Touch**: If a node modifies a field, it shouldn't build further on that field within the same execution
+2. **Return Partial State**: Return only the fields you're updating, let reducers handle merging
+3. **No Side Effects in State Logic**: Side effects (API calls, file I/O) are OK, but state transformation must be pure
+4. **Checkpointing Friendly**: Immutable patterns enable time-travel debugging and state replay
+
+### Pre-Implementation Architecture Changes
+**MUST BE COMPLETED BEFORE ADDING TOOLS:**
+
+#### 1. Remove Static Constraints
+- **REMOVE MIN_REASONING_LENGTH**: No minimum reasoning steps requirement
+- **REMOVE WRITER_TEMPERATURE**: No hardcoded temperature constants
+
+#### 2. Simplify State Management
+- **REMOVE reasoning_steps field**: No separate reasoning_steps list
+- **REMOVE reasoning_count field**: Count dynamically from messages
+- **Messages field becomes single source of truth**: Contains ALL messages for current thread
+
+#### 3. Message Type Constraints
+- **Messages MUST contain ONLY**:
+  - `HumanMessage`: User inputs
+  - `AIMessage`: Both reasoning and final answers
+- **Use metadata/kwargs for differentiation**:
+  - `type`: "reasoning" | "final_answer"
+  - `source`: "orchestrator" | "writer"
+  - Other metadata as needed
+- **NO SystemMessage in state.messages**: System prompts/history injected at invoke time only
+
+#### 4. Node Responsibilities (Strict Functional Pattern)
+- **Orchestrator Node**:
+  - READS: messages, context, tools
+  - RETURNS: `{"messages": [...new_reasoning], "ready_to_answer": bool}`
+  - NEVER: Modifies then re-reads messages in same execution
+- **Writer Node**:
+  - READS: messages (with all reasoning)
+  - RETURNS: `{"messages": [...final_answer]}`
+  - NEVER: Touches ready_to_answer or any other field
+
+#### 5. Dynamic Reasoning Counting
+```python
+# Count dynamically when needed
+reasoning_count = len([m for m in state["messages"] 
+                       if isinstance(m, AIMessage) 
+                       and m.metadata.get('type') == 'reasoning'])
+```
+
+#### 6. Clean Invocation Pattern
+```python
+# Build prompt outside state
+full_messages = [
+    SystemMessage(content=SYSTEM_PROMPT),
+    *format_history(state["history"]),
+    *state["messages"]  # Clean, unpolluted
+]
+# Invoke with composed messages
+response = model.invoke(full_messages)
+# Return only the new message
+return {"messages": state["messages"] + [response]}
+```
+
 ### Core Enhancement: Tool-Augmented Reasoning
 Transform the pure reasoning system into a tool-augmented intelligence that can execute code, perform operations, and search for real-time information.
 
