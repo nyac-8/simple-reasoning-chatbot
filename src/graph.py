@@ -1,12 +1,10 @@
 """Main LangGraph definition for the reasoning chatbot"""
 
 from langgraph.graph import StateGraph, END
+from loguru import logger
 from .state import State
 from .agents.orchestrator import orchestrator_agent
 from .agents.writer import writer_agent
-from .utils import get_logger
-
-logger = get_logger("graph")
 
 
 def should_continue(state: State) -> str:

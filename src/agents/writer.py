@@ -2,22 +2,25 @@
 
 from typing import Dict, Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_google_genai import ChatGoogleGenerativeAI
+from loguru import logger
 from ..state import State
 from ..prompts import WRITER_PROMPT
-from ..utils import get_logger
+from ..utils import format_conversation_history
 
 # Configuration constants
 WRITER_TEMPERATURE = 0.0
 
-logger = get_logger("writer")
 
-
-def writer_agent(state: State) -> Dict[str, Any]:
+def writer_agent(state: State, config: RunnableConfig) -> Dict[str, Any]:
     """
     Writer agent that takes reasoning steps and creates a polished final answer.
+    
+    Follows LangGraph node signature: (state, config) -> state_updates
     """
-    logger.info(f"Writer started for thread {state.get('thread_id', 'unknown')}")
+    thread_id = config.get("configurable", {}).get("thread_id", "unknown")
+    logger.info(f"Writer started for thread {thread_id}")
     
     # Initialize Gemini model
     model = ChatGoogleGenerativeAI(
@@ -28,48 +31,40 @@ def writer_agent(state: State) -> Dict[str, Any]:
     # Get state components
     current_question = state.get("current_question", "")
     reasoning_steps = state.get("reasoning_steps", [])
-    messages = state.get("messages", [])
     history = state.get("history", [])
     
-    # Build the writing prompt
-    writing_messages = [
-        SystemMessage(content=WRITER_PROMPT)
-    ]
+    # Build structured prompt with clear sections
+    system_content = WRITER_PROMPT
     
-    # Add conversation context if exists
-    if messages:
-        writing_messages.append(
-            SystemMessage(content="Conversation context:")
-        )
-        # Only include human/AI exchanges, not system messages
-        for msg in messages:
-            if isinstance(msg, (HumanMessage, AIMessage)) and not msg.additional_kwargs.get("type") == "reasoning":
-                writing_messages.append(msg)
+    # Add conversation history if exists
+    if history:
+        history_section = format_conversation_history(history)
+        system_content += f"\n\n{history_section}"
+    
+    # Build messages list
+    messages = [SystemMessage(content=system_content)]
     
     # Add the current question
-    writing_messages.append(
-        HumanMessage(content=current_question)
-    )
+    messages.append(HumanMessage(content=f"Question: {current_question}"))
     
     # Add reasoning steps
     if reasoning_steps:
-        writing_messages.append(
-            SystemMessage(content="Reasoning process to synthesize:")
-        )
-        for step in reasoning_steps:
-            writing_messages.append(
-                SystemMessage(content=f"Reasoning: {step.content}")
-            )
+        messages.append(SystemMessage(content="\n=== REASONING PROCESS ==="))
+        for i, step in enumerate(reasoning_steps, 1):
+            messages.append(SystemMessage(content=f"Step {i}: {step.content}"))
     
-    # Request final answer
-    writing_messages.append(
-        SystemMessage(content="Now, synthesize this reasoning into a clear, well-structured response to the user's question:")
-    )
+    # Add task instruction
+    task_instruction = """\n=== YOUR TASK ===
+Synthesize the above reasoning into a clear, well-structured response that directly answers the user's question.
+Be concise but thorough. Use the reasoning to support your answer."""
+    
+    messages.append(SystemMessage(content=task_instruction))
     
     # Generate final answer
     logger.debug("Generating final answer from reasoning")
-    response = model.invoke(writing_messages)
+    logger.info(f"Calling LLM for writer to synthesize {len(reasoning_steps)} reasoning steps")
     
+    response = model.invoke(messages)
     final_answer = response.content
     
     # Update history with Q&A pair
@@ -77,12 +72,15 @@ def writer_agent(state: State) -> Dict[str, Any]:
     
     logger.info("Final answer generated successfully")
     
+    # Create updated messages list with just the Q&A
+    new_messages = [
+        HumanMessage(content=current_question),
+        AIMessage(content=final_answer, additional_kwargs={"type": "final_answer"})
+    ]
+    
     # Return state updates
     return {
         "final_answer": final_answer,
         "history": new_history,
-        "messages": messages + [
-            HumanMessage(content=current_question),
-            AIMessage(content=final_answer, additional_kwargs={"type": "final_answer"})
-        ]
+        "messages": new_messages  # Only keep current Q&A in messages
     }

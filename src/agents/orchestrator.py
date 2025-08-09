@@ -1,52 +1,43 @@
 """Orchestrator agent - handles reasoning loops and decision making"""
 
-import json
 from typing import Dict, Any
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.runnables import RunnableConfig
 from langchain_google_genai import ChatGoogleGenerativeAI
+from loguru import logger
 from ..state import State
 from ..prompts import ORCHESTRATOR_PROMPT
-from ..utils import get_logger
+from ..utils import format_conversation_history
 
 # Configuration constants
 MAX_REASONING_STEPS = 20
 ORCHESTRATOR_TEMPERATURE = 0.0
-MIN_REASONING_LENGTH = 10
-
-logger = get_logger("orchestrator")
 
 
-def parse_json_response(response_content: str) -> Dict[str, Any]:
-    """Parse JSON response from the model, handling markdown code blocks."""
-    try:
-        # Handle markdown code blocks
-        if response_content.startswith("```json"):
-            response_content = response_content.replace("```json", "").replace("```", "").strip()
-        elif response_content.startswith("```"):
-            response_content = response_content.replace("```", "").strip()
-        
-        return json.loads(response_content)
-    except (json.JSONDecodeError, KeyError) as e:
-        logger.error(f"Failed to parse JSON response: {e}")
-        logger.debug(f"Raw response: {response_content}")
-        return {}
 
 
-def orchestrator_agent(state: State) -> Dict[str, Any]:
+def orchestrator_agent(state: State, config: RunnableConfig) -> Dict[str, Any]:
     """
     Orchestrator agent that performs reasoning loops.
     Decides when reasoning is sufficient and ready to hand off to writer.
-    """
-    logger.info(f"Orchestrator started for thread {state.get('thread_id', 'unknown')}")
     
-    # Initialize Gemini model
+    Follows LangGraph node signature: (state, config) -> state_updates
+    """
+    thread_id = config.get("configurable", {}).get("thread_id", "unknown")
+    logger.info(f"Orchestrator started for thread {thread_id}")
+    
+    # Initialize Gemini model with structured output
     model = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
         temperature=ORCHESTRATOR_TEMPERATURE
     )
     
+    # Create JSON parser - simple, no Pydantic
+    parser = JsonOutputParser()
+    
     # Get current state
-    messages = state.get("messages", [])
+    history = state.get("history", [])
     reasoning_steps = state.get("reasoning_steps", [])
     reasoning_count = state.get("reasoning_count", 0)
     current_question = state.get("current_question", "")
@@ -59,76 +50,72 @@ def orchestrator_agent(state: State) -> Dict[str, Any]:
             "reasoning_count": reasoning_count
         }
     
-    # Build the reasoning prompt
-    reasoning_messages = [
-        SystemMessage(content=ORCHESTRATOR_PROMPT)
-    ]
+    # Build structured prompt with clear sections
+    system_content = ORCHESTRATOR_PROMPT
     
     # Add conversation history if exists
-    if messages:
-        reasoning_messages.extend(messages)
+    if history:
+        history_section = format_conversation_history(history)
+        system_content += f"\n\n{history_section}"
     
-    # Add the current question as a HumanMessage
-    reasoning_messages.append(HumanMessage(content=current_question))
+    # Build messages list
+    messages = [SystemMessage(content=system_content)]
+    
+    # Add the current question
+    messages.append(HumanMessage(content=f"Question: {current_question}"))
     
     # Add previous reasoning steps if any
     if reasoning_steps:
-        reasoning_messages.append(
-            SystemMessage(content="Your reasoning so far:")
-        )
-        reasoning_messages.extend(reasoning_steps)
+        messages.append(SystemMessage(content="\n=== YOUR REASONING SO FAR ==="))
+        for step in reasoning_steps:
+            messages.append(SystemMessage(content=f"- {step.content}"))
     
-    # Request next reasoning step with JSON response
-    json_prompt = """Based on the question and any previous reasoning, provide your next reasoning step.
+    # Add task instruction with format instructions
+    task_instruction = """\n=== YOUR TASK ===
+Provide your next reasoning step. Think step-by-step about the question.
+Decide if you have enough reasoning to provide a final answer.
 
-Remember to respond in JSON format:
+Respond in JSON format:
 {
-    "thinking": "Your reasoning here",
+    "thinking": "Your reasoning process here",
     "ready_to_answer": true or false
 }"""
     
-    reasoning_messages.append(SystemMessage(content=json_prompt))
+    messages.append(SystemMessage(content=task_instruction))
     
     # Get reasoning step
     logger.debug(f"Generating reasoning step {reasoning_count + 1}")
-    reasoning_response = model.invoke(reasoning_messages)
+    logger.info(f"Calling LLM for orchestrator reasoning step {reasoning_count + 1}")
     
-    response_content = reasoning_response.content.strip()
-    
-    # Parse JSON response
-    response_data = parse_json_response(response_content)
-    
-    if response_data:
-        # Extract thinking and decision from parsed JSON
-        reasoning_content = response_data.get("thinking", "")
-        ready_to_answer = response_data.get("ready_to_answer", False)
+    try:
+        # Create chain with parser
+        chain = model | parser
+        response = chain.invoke(messages)
         
-        # Validate the response
-        if not reasoning_content or len(reasoning_content.strip()) < MIN_REASONING_LENGTH:
-            logger.warning(f"Empty or too short reasoning content at step {reasoning_count + 1}")
-            # If we've done at least 2 steps, mark as ready
-            ready_to_answer = reasoning_count >= 2
-            new_reasoning_steps = reasoning_steps
-        else:
-            # Create reasoning step with the thinking content
-            reasoning_step = AIMessage(
-                content=reasoning_content,
-                additional_kwargs={"type": "reasoning"}
-            )
-            new_reasoning_steps = reasoning_steps + [reasoning_step]
-    else:
-        # Fallback: try to use the raw content as reasoning
-        if response_content and len(response_content) > MIN_REASONING_LENGTH:
-            reasoning_step = AIMessage(
-                content=response_content,
-                additional_kwargs={"type": "reasoning"}
-            )
-            new_reasoning_steps = reasoning_steps + [reasoning_step]
-        else:
-            new_reasoning_steps = reasoning_steps
+        # Extract thinking and decision from parsed response
+        # JsonOutputParser returns a dict
+        reasoning_content = response.get("thinking", "")
+        ready_to_answer = response.get("ready_to_answer", False)
         
-        # Default decision based on step count
+        # Ensure at least 2 reasoning steps before allowing ready_to_answer
+        if ready_to_answer and reasoning_count < 1:  # 0-indexed, so < 1 means less than 2 steps
+            logger.debug("Overriding ready_to_answer=True since we need at least 2 reasoning steps")
+            ready_to_answer = False
+        
+        # Create reasoning step with the thinking content
+        reasoning_step = AIMessage(
+            content=reasoning_content,
+            additional_kwargs={"type": "reasoning"}
+        )
+        new_reasoning_steps = reasoning_steps + [reasoning_step]
+        
+        logger.debug(f"Reasoning step {reasoning_count + 1}: {reasoning_content[:100]}...")
+        
+    except Exception as e:
+        logger.error(f"Failed to parse orchestrator response: {e}")
+        # Fallback: if we've done at least 2 steps, mark as ready
         ready_to_answer = reasoning_count >= 2
+        new_reasoning_steps = reasoning_steps
     
     logger.info(f"Reasoning step {reasoning_count + 1} complete. Ready to answer: {ready_to_answer}")
     
