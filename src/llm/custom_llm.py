@@ -58,6 +58,24 @@ class CustomLLM:
             logger.error(f"Generation failed: {e}")
             raise
     
+    def generate_from_messages(self, messages: List, **kwargs) -> str:
+        """
+        Generate text from a list of messages.
+        
+        Args:
+            messages: List of message objects (in temporal order)
+            **kwargs: Additional generation parameters
+        
+        Returns:
+            Generated text string
+        """
+        try:
+            response = self.model.invoke(messages, **kwargs)
+            return response.content
+        except Exception as e:
+            logger.error(f"Generation from messages failed: {e}")
+            raise
+    
     def get_structured_output(
         self,
         prompt: str,
@@ -91,6 +109,46 @@ class CustomLLM:
             return response.content
         except Exception as e:
             logger.error(f"Structured generation failed: {e}")
+            raise
+    
+    def get_structured_output_with_messages(
+        self,
+        messages: List,
+        system_prompt: str,
+        schema: Dict[str, Any],
+        **kwargs
+    ) -> str:
+        """
+        Generate structured JSON output with message history.
+        
+        Args:
+            messages: List of messages (temporal order)
+            system_prompt: System prompt to prepend
+            schema: JSON schema dict (Vertex AI format)
+            **kwargs: Additional parameters
+        
+        Returns:
+            JSON string
+        """
+        try:
+            # Configure model for JSON output
+            model = ChatGoogleGenerativeAI(
+                model=self.model_name,
+                temperature=self.temperature,
+                response_mime_type="application/json",
+                response_schema=schema
+            )
+            
+            # Build full message list with system prompt
+            from langchain_core.messages import SystemMessage
+            full_messages = [SystemMessage(content=system_prompt)] + messages
+            
+            response = model.invoke(full_messages, **kwargs)
+            
+            # Response is already JSON formatted
+            return response.content
+        except Exception as e:
+            logger.error(f"Structured generation with messages failed: {e}")
             raise
     
     def tool_calls(

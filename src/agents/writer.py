@@ -1,22 +1,22 @@
-"""Writer node - formats final responses from reasoning"""
+"""Writer node - formats final responses from reasoning and tool results"""
 
 from typing import Dict, Any
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from ..state import State
 from ..prompts import WRITER_PROMPT
-from ..utils import compose_messages_to_prompt, extract_current_question
 from ..llm import CustomLLM
 
 
 def writer_node(state: State, config: RunnableConfig) -> Dict[str, Any]:
     """
-    Writer node that synthesizes reasoning into final answer.
+    Writer node that synthesizes all messages into a final answer.
     
     Pure function that:
-    - READS: messages (with all reasoning)
+    - READS: messages (complete temporal history including reasoning and tools)
     - RETURNS: {"messages": [...final_answer], "final_answer": str}
+    - Uses ALL context to answer the human's question
     """
     thread_id = config.get("configurable", {}).get("thread_id", "unknown")
     logger.info(f"Writer started for thread {thread_id}")
@@ -28,40 +28,31 @@ def writer_node(state: State, config: RunnableConfig) -> Dict[str, Any]:
     messages = state.get("messages", [])
     history = state.get("history", [])
     
-    # Extract question
-    current_question = extract_current_question(messages)
+    # Create system prompt for writer
+    system_prompt = f"""{WRITER_PROMPT}
+
+=== YOUR TASK ===
+The messages below show the complete conversation in temporal order.
+This includes:
+- The human's question
+- AI reasoning steps
+- Tool calls and their results
+- All context gathered
+
+Based on ALL this information, provide a clear, accurate, and helpful answer to the human's question.
+Use the tool results and reasoning to support your response.
+DO NOT say you don't have information if tools have provided it.
+
+The messages are in temporal order (oldest first).
+Write your response directly to answer the human's original question."""
     
-    # Build prompt with reasoning steps
-    prompt_parts = [WRITER_PROMPT]
+    logger.debug(f"Synthesizing from {len(messages)} messages")
     
-    # Add reasoning steps
-    reasoning_messages = [
-        msg for msg in messages 
-        if isinstance(msg, AIMessage) and msg.additional_kwargs.get("type") == "reasoning"
-    ]
+    # Pass ALL messages to the LLM - let it see everything
+    full_messages = [SystemMessage(content=system_prompt)] + messages
     
-    if reasoning_messages:
-        prompt_parts.append("\n=== REASONING PROCESS ===")
-        for i, msg in enumerate(reasoning_messages, 1):
-            prompt_parts.append(f"Step {i}: {msg.content}")
-    
-    # Add task instruction
-    prompt_parts.append("""\n=== YOUR TASK ===
-Synthesize the above reasoning into a clear, well-structured response that directly answers the user's question.
-Be concise but thorough. Use the reasoning to support your answer.""")
-    
-    # Compose full prompt
-    system_prompt = "\n".join(prompt_parts)
-    prompt = compose_messages_to_prompt(
-        messages=[m for m in messages if isinstance(m, HumanMessage)],
-        system_prompt=system_prompt,
-        history=history
-    )
-    
-    logger.debug(f"Synthesizing {len(reasoning_messages)} reasoning steps")
-    
-    # Generate final answer
-    final_answer = llm.generate_content(prompt)
+    # Generate final answer using all context
+    final_answer = llm.generate_from_messages(full_messages)
     
     logger.info("Final answer generated successfully")
     

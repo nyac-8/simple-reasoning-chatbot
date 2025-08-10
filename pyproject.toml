@@ -13,4 +13,6 @@ dependencies = [
     "dotenv>=0.9.9",
     "langchain-google-genai>=2.1.9",
     "loguru>=0.7.3",
+    "langchain-experimental>=0.3.4",
+    "langchain-tavily>=0.2.11",
 ]

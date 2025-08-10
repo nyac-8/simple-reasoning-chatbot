@@ -1,0 +1,53 @@
+2025-08-10 11:11:58.626 | INFO     | src.graph:create_graph:60 - Creating reasoning chatbot graph with tool support
+2025-08-10 11:11:58.630 | INFO     | src.graph:create_graph:93 - Graph created and compiled successfully
+2025-08-10 11:11:58.633 | INFO     | src.agents.orchestrator:orchestrator_node:45 - Orchestrator started for thread 2b32f611-db88-4404-9a1a-7a5bd6419880
+2025-08-10 11:11:58.640 | INFO     | src.llm.custom_llm:__init__:40 - CustomLLM initialized: model=gemini-2.0-flash, temp=0.0
+2025-08-10 11:11:58.640 | DEBUG    | src.agents.orchestrator:orchestrator_node:121 - Generating reasoning step 1
+2025-08-10 11:11:59.605 | DEBUG    | src.agents.orchestrator:orchestrator_node:145 - Enforcing minimum 1 reasoning step
+2025-08-10 11:11:59.605 | INFO     | src.agents.orchestrator:orchestrator_node:159 - Step 1: use_tools=False, ready=False
+2025-08-10 11:11:59.606 | DEBUG    | src.graph:should_continue:36 - Routing decision: use_tools=False, ready=False
+2025-08-10 11:11:59.606 | INFO     | src.graph:should_continue:46 - Continuing orchestrator reasoning loop
+2025-08-10 11:11:59.606 | INFO     | src.agents.orchestrator:orchestrator_node:45 - Orchestrator started for thread 2b32f611-db88-4404-9a1a-7a5bd6419880
+2025-08-10 11:11:59.608 | INFO     | src.llm.custom_llm:__init__:40 - CustomLLM initialized: model=gemini-2.0-flash, temp=0.0
+2025-08-10 11:11:59.608 | DEBUG    | src.agents.orchestrator:orchestrator_node:121 - Generating reasoning step 2
+2025-08-10 11:12:00.611 | INFO     | src.agents.orchestrator:orchestrator_node:159 - Step 2: use_tools=False, ready=True
+2025-08-10 11:12:00.612 | DEBUG    | src.graph:should_continue:36 - Routing decision: use_tools=False, ready=True
+2025-08-10 11:12:00.612 | INFO     | src.graph:should_continue:42 - Routing to writer node
+2025-08-10 11:12:00.613 | INFO     | src.agents.writer:writer_node:22 - Writer started for thread 2b32f611-db88-4404-9a1a-7a5bd6419880
+2025-08-10 11:12:00.616 | INFO     | src.llm.custom_llm:__init__:40 - CustomLLM initialized: model=gemini-2.0-flash, temp=0.0
+2025-08-10 11:12:00.616 | DEBUG    | src.agents.writer:writer_node:61 - Synthesizing 0 reasoning steps
+2025-08-10 11:12:01.349 | INFO     | src.agents.writer:writer_node:66 - Final answer generated successfully
+2025-08-10 11:12:01.351 | INFO     | src.agents.orchestrator:orchestrator_node:45 - Orchestrator started for thread f9382312-c4fe-4b60-947d-cd81df3fadab
+2025-08-10 11:12:01.353 | INFO     | src.llm.custom_llm:__init__:40 - CustomLLM initialized: model=gemini-2.0-flash, temp=0.0
+2025-08-10 11:12:01.354 | DEBUG    | src.agents.orchestrator:orchestrator_node:121 - Generating reasoning step 1
+2025-08-10 11:12:02.554 | DEBUG    | src.agents.orchestrator:orchestrator_node:145 - Enforcing minimum 1 reasoning step
+2025-08-10 11:12:02.555 | INFO     | src.agents.orchestrator:orchestrator_node:159 - Step 1: use_tools=False, ready=False
+2025-08-10 11:12:02.556 | DEBUG    | src.graph:should_continue:36 - Routing decision: use_tools=False, ready=False
+2025-08-10 11:12:02.556 | INFO     | src.graph:should_continue:46 - Continuing orchestrator reasoning loop
+2025-08-10 11:12:02.557 | INFO     | src.agents.orchestrator:orchestrator_node:45 - Orchestrator started for thread f9382312-c4fe-4b60-947d-cd81df3fadab
+2025-08-10 11:12:02.560 | INFO     | src.llm.custom_llm:__init__:40 - CustomLLM initialized: model=gemini-2.0-flash, temp=0.0
+2025-08-10 11:12:02.560 | DEBUG    | src.agents.orchestrator:orchestrator_node:121 - Generating reasoning step 2
+2025-08-10 11:12:03.642 | INFO     | src.agents.orchestrator:orchestrator_node:159 - Step 2: use_tools=False, ready=True
+2025-08-10 11:12:03.643 | DEBUG    | src.graph:should_continue:36 - Routing decision: use_tools=False, ready=True
+2025-08-10 11:12:03.643 | INFO     | src.graph:should_continue:42 - Routing to writer node
+2025-08-10 11:12:03.644 | INFO     | src.agents.writer:writer_node:22 - Writer started for thread f9382312-c4fe-4b60-947d-cd81df3fadab
+2025-08-10 11:12:03.646 | INFO     | src.llm.custom_llm:__init__:40 - CustomLLM initialized: model=gemini-2.0-flash, temp=0.0
+2025-08-10 11:12:03.646 | DEBUG    | src.agents.writer:writer_node:61 - Synthesizing 0 reasoning steps
+2025-08-10 11:12:04.482 | INFO     | src.agents.writer:writer_node:66 - Final answer generated successfully
+2025-08-10 11:12:04.485 | INFO     | src.agents.orchestrator:orchestrator_node:45 - Orchestrator started for thread 29b8d437-297a-49e8-9623-c864abc1ef8c
+2025-08-10 11:12:04.487 | INFO     | src.llm.custom_llm:__init__:40 - CustomLLM initialized: model=gemini-2.0-flash, temp=0.0
+2025-08-10 11:12:04.487 | DEBUG    | src.agents.orchestrator:orchestrator_node:121 - Generating reasoning step 1
+2025-08-10 11:12:06.332 | DEBUG    | src.agents.orchestrator:orchestrator_node:145 - Enforcing minimum 1 reasoning step
+2025-08-10 11:12:06.332 | INFO     | src.agents.orchestrator:orchestrator_node:159 - Step 1: use_tools=False, ready=False
+2025-08-10 11:12:06.333 | DEBUG    | src.graph:should_continue:36 - Routing decision: use_tools=False, ready=False
+2025-08-10 11:12:06.333 | INFO     | src.graph:should_continue:46 - Continuing orchestrator reasoning loop
+2025-08-10 11:12:06.333 | INFO     | src.agents.orchestrator:orchestrator_node:45 - Orchestrator started for thread 29b8d437-297a-49e8-9623-c864abc1ef8c
+2025-08-10 11:12:06.333 | INFO     | src.llm.custom_llm:__init__:40 - CustomLLM initialized: model=gemini-2.0-flash, temp=0.0
+2025-08-10 11:12:06.333 | DEBUG    | src.agents.orchestrator:orchestrator_node:121 - Generating reasoning step 2
+2025-08-10 11:12:07.694 | INFO     | src.agents.orchestrator:orchestrator_node:159 - Step 2: use_tools=False, ready=True
+2025-08-10 11:12:07.695 | DEBUG    | src.graph:should_continue:36 - Routing decision: use_tools=False, ready=True
+2025-08-10 11:12:07.695 | INFO     | src.graph:should_continue:42 - Routing to writer node
+2025-08-10 11:12:07.696 | INFO     | src.agents.writer:writer_node:22 - Writer started for thread 29b8d437-297a-49e8-9623-c864abc1ef8c
+2025-08-10 11:12:07.698 | INFO     | src.llm.custom_llm:__init__:40 - CustomLLM initialized: model=gemini-2.0-flash, temp=0.0
+2025-08-10 11:12:07.698 | DEBUG    | src.agents.writer:writer_node:61 - Synthesizing 0 reasoning steps
+2025-08-10 11:12:08.744 | INFO     | src.agents.writer:writer_node:66 - Final answer generated successfully
