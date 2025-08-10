@@ -3,8 +3,8 @@
 from langgraph.graph import StateGraph, END
 from loguru import logger
 from .state import State
-from .agents.orchestrator import orchestrator_agent
-from .agents.writer import writer_agent
+from .agents.orchestrator import orchestrator_node
+from .agents.writer import writer_node
 
 
 def should_continue(state: State) -> str:
@@ -13,12 +13,11 @@ def should_continue(state: State) -> str:
     Returns "writer" if ready to answer, "orchestrator" to continue reasoning.
     """
     ready = state.get("ready_to_answer", False)
-    reasoning_count = state.get("reasoning_count", 0)
     
-    logger.debug(f"Evaluating continuation: ready={ready}, reasoning_count={reasoning_count}")
+    logger.debug(f"Evaluating continuation: ready={ready}")
     
     if ready:
-        logger.info("Routing to writer agent")
+        logger.info("Routing to writer node")
         return "writer"
     else:
         logger.info("Continuing orchestrator reasoning loop")
@@ -35,8 +34,8 @@ def create_graph():
     graph = StateGraph(State)
     
     # Add nodes
-    graph.add_node("orchestrator", orchestrator_agent)
-    graph.add_node("writer", writer_agent)
+    graph.add_node("orchestrator", orchestrator_node)
+    graph.add_node("writer", writer_node)
     
     # Set entry point
     graph.set_entry_point("orchestrator")

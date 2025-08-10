@@ -94,22 +94,27 @@ def node(state: State, config: Config) -> PartialState:
 
 #### 1. Remove Static Constraints
 - **REMOVE MIN_REASONING_LENGTH**: No minimum reasoning steps requirement
-- **REMOVE WRITER_TEMPERATURE**: No hardcoded temperature constants
+- **Temperature at model init**: Set temperature=0 at model initialization (no constants)
 
 #### 2. Simplify State Management
 - **REMOVE reasoning_steps field**: No separate reasoning_steps list
 - **REMOVE reasoning_count field**: Count dynamically from messages
-- **Messages field becomes single source of truth**: Contains ALL messages for current thread
+- **REMOVE current_question field**: Extract from first HumanMessage in thread
+- **Messages field becomes single source of truth**: Contains ALL messages for current THREAD
+  - Thread = one complete Q&A interaction with reasoning
+  - Session history managed externally (first human + final answer pairs)
 
 #### 3. Message Type Constraints
 - **Messages MUST contain ONLY**:
   - `HumanMessage`: User inputs
   - `AIMessage`: Both reasoning and final answers
-- **Use metadata/kwargs for differentiation**:
-  - `type`: "reasoning" | "final_answer"
-  - `source`: "orchestrator" | "writer"
+  - `ToolMessage`: Tool execution results (v2)
+- **Use metadata for differentiation**:
+  - `type`: "reasoning" | "final_answer" | "tool_result"
+  - `source`: "orchestrator" | "writer" | "tool"
   - Other metadata as needed
 - **NO SystemMessage in state.messages**: System prompts/history injected at invoke time only
+- **NO thread_id/session_id in messages**: These are implied from context
 
 #### 4. Node Responsibilities (Strict Functional Pattern)
 - **Orchestrator Node**:
@@ -129,18 +134,53 @@ reasoning_count = len([m for m in state["messages"]
                        and m.metadata.get('type') == 'reasoning'])
 ```
 
-#### 6. Clean Invocation Pattern
+#### 6. Prompt Composition Strategy (Future-Proof)
+**Critical**: Prepare for custom LLMs that only accept string prompts
+
+```python
+# Current: LangChain ChatModel interface
+model.invoke(messages)  # List[BaseMessage]
+
+# Future: Custom LLM interface
+def compose_prompt(messages: List[BaseMessage]) -> str:
+    """Convert messages to single prompt string for custom LLMs"""
+    prompt_parts = []
+    for msg in messages:
+        if isinstance(msg, SystemMessage):
+            prompt_parts.append(f"System: {msg.content}")
+        elif isinstance(msg, HumanMessage):
+            prompt_parts.append(f"Human: {msg.content}")
+        elif isinstance(msg, AIMessage):
+            prompt_parts.append(f"Assistant: {msg.content}")
+        elif isinstance(msg, ToolMessage):
+            prompt_parts.append(f"Tool: {msg.content}")
+    return "\n\n".join(prompt_parts)
+
+# In nodes:
+full_messages = [SystemMessage(PROMPT), *state["messages"]]
+if USE_CUSTOM_LLM:
+    prompt_str = compose_prompt(full_messages)
+    response = custom_llm.generate(prompt_str)
+else:
+    response = langchain_model.invoke(full_messages)
+```
+
+#### 7. Clean Invocation Pattern
 ```python
 # Build prompt outside state
 full_messages = [
     SystemMessage(content=SYSTEM_PROMPT),
-    *format_history(state["history"]),
-    *state["messages"]  # Clean, unpolluted
+    *format_history(state["history"]),  # Only if needed
+    *state["messages"]  # Clean, unpolluted thread messages
 ]
 # Invoke with composed messages
 response = model.invoke(full_messages)
-# Return only the new message
-return {"messages": state["messages"] + [response]}
+# Return only the new message with metadata
+new_message = AIMessage(
+    content=response.content,
+    metadata={"type": "reasoning", "source": "orchestrator"}
+)
+return {"messages": state["messages"] + [new_message]}
 ```
 
 ### Core Enhancement: Tool-Augmented Reasoning
@@ -206,21 +246,23 @@ Transform the pure reasoning system into a tool-augmented intelligence that can 
 ### State Schema v2 Updates
 ```python
 {
-    "session_id": str,
-    "thread_id": str,
-    "messages": List[BaseMessage],
-    "history": List[Tuple[str, str]],
-    "reasoning_steps": List[BaseMessage],
-    "tool_history": List[ToolMessage],  # NEW: Track tool usage
-    "context": Dict[str, Any],          # NOW USED: Store tool outputs
-    "tools": List[BaseTool],            # NOW POPULATED: Available tools
-    "ready_to_answer": bool,
-    "final_answer": Optional[str],
-    "current_question": str,
-    "reasoning_count": int,
-    "tool_count": int                   # NEW: Track tool invocations
+    "session_id": str,                  # Session identifier (managed externally)
+    "thread_id": str,                   # Thread identifier (one Q&A cycle)
+    "messages": List[BaseMessage],      # ALL messages in thread (Human, AI, Tool)
+    "history": List[Tuple[str, str]],   # Past threads (first human + final answer)
+    "context": Dict[str, Any],          # Tool outputs, search results, etc.
+    "tools": List[BaseTool],            # Available tools for v2
+    "ready_to_answer": bool,            # Orchestrator's decision flag
+    "final_answer": Optional[str]       # Cached final answer for convenience
 }
 ```
+
+**Key Changes from v1**:
+- REMOVED: `reasoning_steps` (now in messages with metadata)
+- REMOVED: `reasoning_count` (count dynamically from messages)
+- REMOVED: `current_question` (extract from first HumanMessage)
+- REMOVED: `tool_history` (tools write to messages directly)
+- SIMPLIFIED: Everything flows through messages with clear metadata
 
 ### Graph Flow v2
 ```

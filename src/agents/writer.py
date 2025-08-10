@@ -1,86 +1,79 @@
-"""Writer agent - formats final responses from reasoning"""
+"""Writer node - formats final responses from reasoning"""
 
 from typing import Dict, Any
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_google_genai import ChatGoogleGenerativeAI
 from loguru import logger
 from ..state import State
 from ..prompts import WRITER_PROMPT
-from ..utils import format_conversation_history
-
-# Configuration constants
-WRITER_TEMPERATURE = 0.0
+from ..utils import compose_messages_to_prompt, extract_current_question
+from ..llm import CustomLLM
 
 
-def writer_agent(state: State, config: RunnableConfig) -> Dict[str, Any]:
+def writer_node(state: State, config: RunnableConfig) -> Dict[str, Any]:
     """
-    Writer agent that takes reasoning steps and creates a polished final answer.
+    Writer node that synthesizes reasoning into final answer.
     
-    Follows LangGraph node signature: (state, config) -> state_updates
+    Pure function that:
+    - READS: messages (with all reasoning)
+    - RETURNS: {"messages": [...final_answer], "final_answer": str}
     """
     thread_id = config.get("configurable", {}).get("thread_id", "unknown")
     logger.info(f"Writer started for thread {thread_id}")
     
-    # Initialize Gemini model
-    model = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
-        temperature=WRITER_TEMPERATURE  # Lower temperature for more consistent formatting
-    )
+    # Initialize LLM
+    llm = CustomLLM(temperature=0.0)
     
-    # Get state components
-    current_question = state.get("current_question", "")
-    reasoning_steps = state.get("reasoning_steps", [])
+    # Get state
+    messages = state.get("messages", [])
     history = state.get("history", [])
     
-    # Build structured prompt with clear sections
-    system_content = WRITER_PROMPT
+    # Extract question
+    current_question = extract_current_question(messages)
     
-    # Add conversation history if exists
-    if history:
-        history_section = format_conversation_history(history)
-        system_content += f"\n\n{history_section}"
-    
-    # Build messages list
-    messages = [SystemMessage(content=system_content)]
-    
-    # Add the current question
-    messages.append(HumanMessage(content=f"Question: {current_question}"))
+    # Build prompt with reasoning steps
+    prompt_parts = [WRITER_PROMPT]
     
     # Add reasoning steps
-    if reasoning_steps:
-        messages.append(SystemMessage(content="\n=== REASONING PROCESS ==="))
-        for i, step in enumerate(reasoning_steps, 1):
-            messages.append(SystemMessage(content=f"Step {i}: {step.content}"))
+    reasoning_messages = [
+        msg for msg in messages 
+        if isinstance(msg, AIMessage) and msg.additional_kwargs.get("type") == "reasoning"
+    ]
+    
+    if reasoning_messages:
+        prompt_parts.append("\n=== REASONING PROCESS ===")
+        for i, msg in enumerate(reasoning_messages, 1):
+            prompt_parts.append(f"Step {i}: {msg.content}")
     
     # Add task instruction
-    task_instruction = """\n=== YOUR TASK ===
+    prompt_parts.append("""\n=== YOUR TASK ===
 Synthesize the above reasoning into a clear, well-structured response that directly answers the user's question.
-Be concise but thorough. Use the reasoning to support your answer."""
+Be concise but thorough. Use the reasoning to support your answer.""")
     
-    messages.append(SystemMessage(content=task_instruction))
+    # Compose full prompt
+    system_prompt = "\n".join(prompt_parts)
+    prompt = compose_messages_to_prompt(
+        messages=[m for m in messages if isinstance(m, HumanMessage)],
+        system_prompt=system_prompt,
+        history=history
+    )
+    
+    logger.debug(f"Synthesizing {len(reasoning_messages)} reasoning steps")
     
     # Generate final answer
-    logger.debug("Generating final answer from reasoning")
-    logger.info(f"Calling LLM for writer to synthesize {len(reasoning_steps)} reasoning steps")
-    
-    response = model.invoke(messages)
-    final_answer = response.content
-    
-    # Update history with Q&A pair
-    new_history = history + [(current_question, final_answer)]
+    final_answer = llm.generate_content(prompt)
     
     logger.info("Final answer generated successfully")
     
-    # Create updated messages list with just the Q&A
-    new_messages = [
-        HumanMessage(content=current_question),
-        AIMessage(content=final_answer, additional_kwargs={"type": "final_answer"})
-    ]
+    # Create final answer message with metadata
+    final_message = AIMessage(
+        content=final_answer,
+        additional_kwargs={"type": "final_answer"},
+        metadata={"type": "final_answer", "source": "writer"}
+    )
     
-    # Return state updates
+    # Return only changed fields
     return {
-        "final_answer": final_answer,
-        "history": new_history,
-        "messages": new_messages  # Only keep current Q&A in messages
+        "messages": messages + [final_message],
+        "final_answer": final_answer
     }
